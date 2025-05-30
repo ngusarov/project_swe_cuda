@@ -10,5 +10,4 @@
 module purge
 module load gcc cuda hdf5
 
-# srun nvprof ./cgsolver lap2D_5pt_n100.mtx
 srun ./swe

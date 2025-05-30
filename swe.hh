@@ -29,8 +29,9 @@ public:
    * @param test_case_id It can be 1 (water drops in a box) or 2 (analytical tsunami).
    * @param nx  Number of cells along the x direction.
    * @param ny  Number of cells along the y direction.
+   * @param threads_per_block Number of CUDA threads per block for kernel launches.
    */
-  SWESolver(const int test_case_id, const std::size_t nx, const std::size_t ny);
+  SWESolver(const int test_case_id, const std::size_t nx, const std::size_t ny, int threads_per_block);
 
   /**
    * @brief Constructor for the SWESolver class.
@@ -41,8 +42,9 @@ public:
    * @param h5_file HDF5 file name containing the initial conditions and topography.
    * @param size_x  Size in km along the x direction.
    * @param size_y  Size in km along the y direction.
+   * @param threads_per_block Number of CUDA threads per block for kernel launches.
    */
-  SWESolver(const std::string &h5_file, const double size_x, const double size_y);
+  SWESolver(const std::string &h5_file, const double size_x, const double size_y, int threads_per_block);
 
   /**
    * @brief Solve the shallow water equations.
@@ -55,11 +57,12 @@ public:
    * a solution file will be written each 10 steps.
    * @brief fname_prefix If @p output_n is different from 0, the generated
    * files will use this file name prefix. This will also be the directory name.
+   * @return The total number of iterations performed.
    */
-  void solve(const double Tend,
-             const bool full_log = false,
-             const std::size_t output_n = 0,
-             const std::string &fname_prefix = "test");
+  std::size_t solve(const double Tend,
+                    const bool full_log = false,
+                    const std::size_t output_n = 0,
+                    const std::string &fname_prefix = "test");
 
 private:
   /**
@@ -103,6 +106,7 @@ private:
   double dx_;
   double dy_;
   bool reflective_;
+  int threads_per_block_; // New member to store threads per block
 
   // GPU data
   std::unique_ptr<SWEMatrixGPU> h0_gpu_;

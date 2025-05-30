@@ -60,6 +60,7 @@ read_2d_array_from_DF5(const std::string &filename,
     H5Sclose(dataspace_id);
     H5Dclose(dataset_id);
     H5Fclose(file_id);
+    data.clear();
     return;
   }
   nx = dims[0]; // Set nx from HDF5
@@ -96,14 +97,16 @@ inline const double &at_host(const std::vector<double> &vec, const std::size_t i
 
 } // namespace
 
-SWESolver::SWESolver(const int test_case_id, const std::size_t nx, const std::size_t ny) :
+SWESolver::SWESolver(const int test_case_id, const std::size_t nx, const std::size_t ny, int threads_per_block) :
   nx_(nx), ny_(ny), // Initialize nx_ and ny_ FIRST
   size_x_(500.0), size_y_(500.0),
   dx_(size_x_ / nx_), dy_(size_y_ / ny_), // Then use them for dx_ and dy_
-  reflective_(true)
+  reflective_(true),
+  threads_per_block_(threads_per_block) // Initialize threads_per_block_
 {
   // Assert minimum grid size for kernel validity
   assert(nx_ >= 3 && ny_ >= 3 && "Grid dimensions must be at least 3x3 for inner cell computations and boundary conditions.");
+  assert(threads_per_block_ > 0 && "threads_per_block must be positive.");
 
   // Allocate GPU matrices
   h0_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
@@ -133,12 +136,15 @@ SWESolver::SWESolver(const int test_case_id, const std::size_t nx, const std::si
   }
 }
 
-SWESolver::SWESolver(const std::string &h5_file, const double domain_size_x, const double domain_size_y) :
+SWESolver::SWESolver(const std::string &h5_file, const double domain_size_x, const double domain_size_y, int threads_per_block) :
   size_x_(domain_size_x), size_y_(domain_size_y), // Initialize size_x_, size_y_ first
   nx_(0), ny_(0), // Initialize nx_, ny_ to 0, they will be set by init_from_HDF5_file_data_load
   dx_(0.0), dy_(0.0), // Initialize dx_, dy_ to 0.0
-  reflective_(false)
+  reflective_(false),
+  threads_per_block_(threads_per_block) // Initialize threads_per_block_
 {
+  assert(threads_per_block_ > 0 && "threads_per_block must be positive.");
+
   // Step 1: Load data from HDF5, this will set member variables nx_ and ny_
   this->init_from_HDF5_file_data_load(h5_file);
 
@@ -353,7 +359,7 @@ SWESolver::init_dx_dy()
   zdy_gpu_->copy_from_host(this->zdy_host_);
 }
 
-void
+std::size_t
 SWESolver::solve(const double Tend, const bool full_log, const std::size_t output_n, const std::string &fname_prefix)
 {
   std::shared_ptr<XDMFWriter> writer;
@@ -372,6 +378,7 @@ SWESolver::solve(const double Tend, const bool full_log, const std::size_t outpu
   }
 
   double T = 0.0;
+  std::size_t total_iterations = 0; // Initialize iteration counter
 
   // Pointers to GPU matrices for current and next time steps
   SWEMatrixGPU* h_current = h0_gpu_.get();
@@ -384,7 +391,6 @@ SWESolver::solve(const double Tend, const bool full_log, const std::size_t outpu
 
   std::cout << "Solving SWE on GPU..." << std::endl;
 
-  std::size_t nt = 1;
   while (T < Tend)
   {
     // Compute time step on GPU
@@ -401,13 +407,14 @@ SWESolver::solve(const double Tend, const bool full_log, const std::size_t outpu
     // Solve one step on GPU
     this->solve_step(dt, *h_current, *hu_current, *hv_current, *h_next, *hu_next, *hv_next);
 
-    if (output_n > 0 && nt % output_n == 0)
+    total_iterations++; // Increment iteration counter
+
+    if (output_n > 0 && total_iterations % output_n == 0) // Use total_iterations for output_n check
     {
       // Copy current h from GPU to host for writing
       h_next->copy_to_host(h_output_host);
       writer->add_h(h_output_host, T1);
     }
-    ++nt;
 
     // Swap GPU pointers for current and next solutions
     std::swap(h_current, h_next);
@@ -437,6 +444,7 @@ SWESolver::solve(const double Tend, const bool full_log, const std::size_t outpu
   }
 
   std::cout << "Finished solving SWE on GPU." << std::endl;
+  return total_iterations; // Return total iterations
 }
 
 double
@@ -446,8 +454,8 @@ SWESolver::compute_time_step(const SWEMatrixGPU &h,
                              const double T,
                              const double Tend) const
 {
-  // Use the GPU function for max_nu_sqr
-  double max_nu_sqr = swe_compute_max_nu_sqr_gpu(nx_, ny_, h, hu, hv);
+  // Use the GPU function for max_nu_sqr, passing threads_per_block_
+  double max_nu_sqr = swe_compute_max_nu_sqr_gpu(nx_, ny_, h, hu, hv, threads_per_block_);
 
   double dt = std::min(dx_, dy_) / (sqrt(2.0 * max_nu_sqr));
   return std::min(dt, Tend - T);
@@ -462,9 +470,9 @@ SWESolver::solve_step(const double dt,
                       SWEMatrixGPU &hu,
                       SWEMatrixGPU &hv) const
 {
-  // Call the host wrapper for the CUDA kernel
+  // Call the host wrapper for the CUDA kernel, passing threads_per_block_
   swe_solve_step_gpu(nx_, ny_, dt, dx_, dy_,
-                     h0, hu0, hv0, *zdx_gpu_, *zdy_gpu_, h, hu, hv);
+                     h0, hu0, hv0, *zdx_gpu_, *zdy_gpu_, h, hu, hv, threads_per_block_);
 }
 
 void
@@ -475,6 +483,6 @@ SWESolver::update_bcs(const SWEMatrixGPU &h0,
                       SWEMatrixGPU &hu,
                       SWEMatrixGPU &hv) const
 {
-  // Call the host wrapper for the CUDA boundary condition kernels
-  swe_update_bcs_gpu(nx_, ny_, reflective_, h0, hu0, hv0, h, hu, hv);
+  // Call the host wrapper for the CUDA boundary condition kernels, passing threads_per_block_
+  swe_update_bcs_gpu(nx_, ny_, reflective_, h0, hu0, hv0, h, hu, hv, threads_per_block_);
 }

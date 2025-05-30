@@ -2,53 +2,82 @@
 
 #include <string>
 #include <cstddef>
-#include <iostream> // Added for std::cout
+#include <iostream>
+#include <chrono>   // For timing
+#include <cstdlib>  // For std::atoi, std::stod
 
 int
-main()
+main(int argc, char **argv)
 {
-  // Uncomment the option you want to run.
+  // Default values
+  int test_case_id = 1;
+  double Tend = 0.01;     // Default for water drops
+  std::size_t nx = 100;
+  std::size_t ny = 100;
+  int threadsPerBlock = 256; // Default CUDA threads per block
+  // std::string output_fname = "output"; // Default output filename prefix
+  bool full_log = false; // Disable full logging for performance runs
+  std::size_t output_n = 10; // Disable output file generation for performance runs
 
-  // Option 1 - Solving simple problem: water drops in a box
-  const int test_case_id = 1;  // Water drops in a box
-  const double Tend = 0.01;     // Simulation time in hours
-  const std::size_t nx = 100; // Number of cells per direction.
-  const std::size_t ny = 100; // Number of cells per direction.
-  const std::size_t output_n = 10;
-  const std::string output_fname = "water_drops";
-  const bool full_log = false;
+  // Parse command line arguments
+  if (argc > 1) {
+    test_case_id = std::atoi(argv[1]);
+  }
+  if (argc > 2) {
+    nx = std::atoi(argv[2]);
+    ny = nx; // Assuming square grid for simplicity in benchmarking
+  }
+  if (argc > 3) {
+    Tend = std::stod(argv[3]);
+  }
+  if (argc > 4) {
+    threadsPerBlock = std::atoi(argv[4]);
+  }
+  // if (argc > 5) {
+  //   output_fname = argv[5]; // Optional: custom output filename prefix
+  // }
 
-  SWESolver solver(test_case_id, nx, ny);
-  solver.solve(Tend, full_log, output_n, output_fname);
+  std::string output_fname = "output_"+std::to_string(test_case_id)+"_"+std::to_string(nx); // Default output filename prefix
 
-  // // Option 2 - Solving analytical (dummy) tsunami example.
-  // const int test_case_id = 2;  // Analytical tsunami test case
-  // const double Tend = 1.0;     // Simulation time in hours
-  // const std::size_t nx = 1000; // Number of cells per direction.
-  // const std::size_t ny = 1000; // Number of cells per direction.
-  // const std::size_t output_n = 10;
-  // const std::string output_fname = "analytical_tsunami";
-  // const bool full_log = false;
+  // Adjust Tend based on test_case_id if not explicitly provided or if defaults are used
+  if (argc <= 3) { // If Tend was not provided as an argument
+      if (test_case_id == 1) {
+          Tend = 0.01;
+      } else if (test_case_id == 2) {
+          Tend = 1.0;
+      } else if (test_case_id == 3) { // For file-based case, use a default Tend
+          Tend = 0.2;
+      }
+  }
 
-  // SWESolver solver(test_case_id, nx, ny);
-  // solver.solve(Tend, full_log, output_n, output_fname);
 
-  // // Option 3 - Solving tsunami problem with data loaded from file.
-  // const double Tend = 0.2;   // Simulation time in hours
-  // const double size = 500.0; // Size of the domain in km
+  // Initialize SWESolver based on test_case_id
+  SWESolver* solver = nullptr;
+  if (test_case_id == 1 || test_case_id == 2) {
+    solver = new SWESolver(test_case_id, nx, ny, threadsPerBlock);
+  } else if (test_case_id == 3) {
+    // For test_case_id 3, we need an HDF5 file.
+    // The problem sizes (nx, ny) should correspond to the file.
+    // We'll assume a naming convention like "Data_nx<size+1>_500km.h5" for simplicity
+    // and a fixed domain size of 500km.
+    std::string h5_filename = "Data_nx" + std::to_string(nx + 1) + "_500km.h5";
+    double domain_size = 500.0; // Assuming 500km for file-based cases
+    solver = new SWESolver(h5_filename, domain_size, domain_size, threadsPerBlock);
+  } else {
+    std::cerr << "Invalid test_case_id: " << test_case_id << std::endl;
+    return 1;
+  }
 
-  // // const std::string fname = "Data_nx501_500km.h5"; // File containg initial data (501x501 mesh).
-  // const std::string fname = "Data_nx1001_500km.h5"; // File containg initial data (1001x1001 mesh).
-  // // const std::string fname = "Data_nx2001_500km.h5"; // File containg initial data (2001x2001 mesh).
-  // // const std::string fname = "Data_nx4001_500km.h5"; // File containg initial data (4001x4001 mesh).
-  // // const std::string fname = "Data_nx8001_500km.h5"; // File containg initial data (8001x8001 mesh).
+  // Measure execution time
+  auto t1 = std::chrono::high_resolution_clock::now();
+  std::size_t total_iterations = solver->solve(Tend, full_log, output_n, output_fname);
+  auto t2 = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = t2 - t1;
 
-  // const std::size_t output_n = 0;
-  // const std::string output_fname = "tsunami";
-  // const bool full_log = false;
+  std::cout << "[TIMING] " << elapsed.count() << " [s]" << std::endl;
+  std::cout << "[ITERATIONS] " << total_iterations << std::endl;
 
-  // SWESolver solver(fname, size, size);
-  // solver.solve(Tend, full_log, output_n, output_fname);
+  delete solver; // Clean up allocated solver object
 
   return 0;
 }

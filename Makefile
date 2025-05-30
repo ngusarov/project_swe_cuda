@@ -7,7 +7,9 @@ LD = $(NVCC)  # Use NVCC for final linking
 
 # --- Compiler Flags ---
 # General optimization and warning flags for both host and device code
-COMMON_FLAGS = -O3 -std=c++17
+
+# COMMON_FLAGS = -O3 -std=c++17
+COMMON_FLAGS = --compiler-options -Wall -std=c++17
 
 # CUDA specific flags for device code
 # Adjust sm_75 to your GPU's compute capability (e.g., sm_86 for Ampere, sm_75 for Turing/Volta)

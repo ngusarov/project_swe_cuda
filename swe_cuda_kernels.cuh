@@ -40,13 +40,13 @@ void swe_solve_step_gpu(std::size_t nx, std::size_t ny,
                         double dt, double dx, double dy,
                         const SWEMatrixGPU& h0, const SWEMatrixGPU& hu0, const SWEMatrixGPU& hv0,
                         const SWEMatrixGPU& zdx, const SWEMatrixGPU& zdy,
-                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv);
+                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv, int threadsPerBlock);
 
 void swe_update_bcs_gpu(std::size_t nx, std::size_t ny, bool reflective,
                         const SWEMatrixGPU& h0, const SWEMatrixGPU& hu0, const SWEMatrixGPU& hv0,
-                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv);
+                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv, int threadsPerBlock);
 
 double swe_compute_max_nu_sqr_gpu(std::size_t nx, std::size_t ny,
-                                  const SWEMatrixGPU& h, const SWEMatrixGPU& hu, const SWEMatrixGPU& hv);
+                                  const SWEMatrixGPU& h, const SWEMatrixGPU& hu, const SWEMatrixGPU& hv, int threadsPerBlock);
 
 #endif // SWE_CUDA_KERNELS_CUH

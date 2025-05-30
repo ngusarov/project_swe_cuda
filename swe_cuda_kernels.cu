@@ -269,12 +269,13 @@ __global__ void reduce_max_kernel(double* input_d, double* output_d, std::size_t
  * @param h SWEMatrixGPU for h (output).
  * @param hu SWEMatrixGPU for hu (output).
  * @param hv SWEMatrixGPU for hv (output).
+ * @param threadsPerBlock Number of CUDA threads per block.
  */
 void swe_solve_step_gpu(std::size_t nx, std::size_t ny,
                         double dt, double dx, double dy,
                         const SWEMatrixGPU& h0, const SWEMatrixGPU& hu0, const SWEMatrixGPU& hv0,
                         const SWEMatrixGPU& zdx, const SWEMatrixGPU& zdy,
-                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv) {
+                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv, int threadsPerBlock) {
   // Only inner cells are computed by this kernel
   std::size_t inner_nx = nx - 2;
   std::size_t inner_ny = ny - 2;
@@ -282,7 +283,6 @@ void swe_solve_step_gpu(std::size_t nx, std::size_t ny,
 
   if (num_elements == 0) return; // No inner cells to compute
 
-  int threadsPerBlock = 256; // Standard block size
   int blocksPerGrid = (num_elements + threadsPerBlock - 1) / threadsPerBlock;
 
   compute_kernel_gpu<<<blocksPerGrid, threadsPerBlock>>>(
@@ -310,13 +310,12 @@ void swe_solve_step_gpu(std::size_t nx, std::size_t ny,
  * @param h SWEMatrixGPU for h (output).
  * @param hu SWEMatrixGPU for hu (output).
  * @param hv SWEMatrixGPU for hv (output).
+ * @param threadsPerBlock Number of CUDA threads per block.
  */
 void swe_update_bcs_gpu(std::size_t nx, std::size_t ny, bool reflective,
                         const SWEMatrixGPU& h0, const SWEMatrixGPU& hu0, const SWEMatrixGPU& hv0,
-                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv) {
+                        SWEMatrixGPU& h, SWEMatrixGPU& hu, SWEMatrixGPU& hv, int threadsPerBlock) {
   double coef = reflective ? -1.0 : 1.0;
-
-  int threadsPerBlock = 256;
 
   // Horizontal boundaries (top and bottom)
   if (nx > 0 && ny >= 2) { // Need at least 2 rows for horizontal boundary updates
@@ -357,10 +356,11 @@ void swe_update_bcs_gpu(std::size_t nx, std::size_t ny, bool reflective,
  * @param h SWEMatrixGPU for h.
  * @param hu SWEMatrixGPU for hu.
  * @param hv SWEMatrixGPU for hv.
+ * @param threadsPerBlock Number of CUDA threads per block.
  * @return The maximum nu_sqr value.
  */
 double swe_compute_max_nu_sqr_gpu(std::size_t nx, std::size_t ny,
-                                  const SWEMatrixGPU& h, const SWEMatrixGPU& hu, const SWEMatrixGPU& hv) {
+                                  const SWEMatrixGPU& h, const SWEMatrixGPU& hu, const SWEMatrixGPU& hv, int threadsPerBlock) {
   std::size_t inner_nx = nx - 2;
   std::size_t inner_ny = ny - 2;
   std::size_t num_elements = inner_nx * inner_ny;
@@ -380,7 +380,6 @@ double swe_compute_max_nu_sqr_gpu(std::size_t nx, std::size_t ny,
       return 0.0;
   }
 
-  int threadsPerBlock = 256;
   int blocksPerGrid_nu = (num_elements + threadsPerBlock - 1) / threadsPerBlock;
 
   // Allocate memory for the output of the first reduction stage
@@ -410,8 +409,10 @@ double swe_compute_max_nu_sqr_gpu(std::size_t nx, std::size_t ny,
   double* output_ptr = temp_reduction_buffer_d;
 
   while (current_n > 1) {
+      // The shared memory size for reduce_max_kernel is threadsPerBlock * sizeof(double)
+      // This needs to be passed as the third argument to the kernel launch.
       int reduce_blocks = (current_n + (threadsPerBlock * 2) - 1) / (threadsPerBlock * 2);
-      if (reduce_blocks == 0 && current_n > 0) reduce_blocks = 1;
+      if (reduce_blocks == 0 && current_n > 0) reduce_blocks = 1; // Ensure at least one block if elements exist
 
       reduce_max_kernel<<<reduce_blocks, threadsPerBlock, threadsPerBlock * sizeof(double)>>>(
           input_ptr, output_ptr, current_n);

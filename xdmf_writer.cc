@@ -104,6 +104,14 @@ XDMFWriter::write_root_xdmf() const
 
         xdmf_file << "      </Grid>\n";
       }
+      // xdmf_file << "    <Grid Name=\"topography_only\" GridType=\"Uniform\">\n"; // Add this grid for static topography
+      // xdmf_file << "        <xi:include xpointer =\"xpointer(/Xdmf/Domain/Grid[@Name='mesh_explicit']/*[self::Topology "
+      //           << "or self::Geometry])\" />\n";
+      // xdmf_file << "        <Attribute Name=\"topography\" AttributeType=\"Scalar\" Center=\"Cell\">\n";
+      // xdmf_file << "          <DataItem DataType=\"Float\" Precision=\"8\" Format=\"HDF\" Dimensions=\"" << ny_ << " " << nx_
+      //           << "\">" << filename_prefix_ << "_topography.h5:/topography</DataItem>\n";
+      // xdmf_file << "        </Attribute>\n";
+      // xdmf_file << "    </Grid>\n";
       xdmf_file << "    </Grid>\n";
     }
 
