@@ -410,7 +410,6 @@ double swe_compute_max_nu_sqr_gpu(std::size_t nx, std::size_t ny,
 
   while (current_n > 1) {
       // The shared memory size for reduce_max_kernel is threadsPerBlock * sizeof(double)
-      // This needs to be passed as the third argument to the kernel launch.
       int reduce_blocks = (current_n + (threadsPerBlock * 2) - 1) / (threadsPerBlock * 2);
       if (reduce_blocks == 0 && current_n > 0) reduce_blocks = 1; // Ensure at least one block if elements exist
 

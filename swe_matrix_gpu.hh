@@ -4,7 +4,7 @@
 
 #include <cuda_runtime.h>
 #include <cassert>
-#include <vector> // For host-device copy functions
+#include <vector> 
 
 /**
  * @brief A class to manage 2D data on the GPU using CUDA Unified Memory.
@@ -26,9 +26,6 @@ public:
     cudaMallocManaged(&data_, nx_ * ny_ * sizeof(double));
     // Error checking for cudaMallocManaged
     if (data_ == nullptr) {
-        // Handle allocation failure, e.g., throw an exception or print an error
-        // For simplicity in this example, we'll assert, but in production,
-        // more robust error handling is recommended.
         assert(false && "CUDA managed memory allocation failed!");
     }
   }

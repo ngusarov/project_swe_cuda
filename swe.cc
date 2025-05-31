@@ -17,7 +17,6 @@
 namespace
 {
 
-// This function remains for reading HDF5 to host std::vector
 void
 read_2d_array_from_DF5(const std::string &filename,
                        const std::string &dataset_name,
@@ -84,7 +83,7 @@ read_2d_array_from_DF5(const std::string &filename,
   H5Fclose(file_id);
 }
 
-// Helper for 2D indexing on host vectors (if still needed for init functions)
+
 inline double &at_host(std::vector<double> &vec, const std::size_t i, const std::size_t j, const std::size_t local_nx)
 {
   return vec[j * local_nx + i];
@@ -98,9 +97,9 @@ inline const double &at_host(const std::vector<double> &vec, const std::size_t i
 } // namespace
 
 SWESolver::SWESolver(const int test_case_id, const std::size_t nx, const std::size_t ny, int threads_per_block) :
-  nx_(nx), ny_(ny), // Initialize nx_ and ny_ FIRST
+  nx_(nx), ny_(ny), 
   size_x_(500.0), size_y_(500.0),
-  dx_(size_x_ / nx_), dy_(size_y_ / ny_), // Then use them for dx_ and dy_
+  dx_(size_x_ / nx_), dy_(size_y_ / ny_), 
   reflective_(true),
   threads_per_block_(threads_per_block) // Initialize threads_per_block_
 {
@@ -137,18 +136,18 @@ SWESolver::SWESolver(const int test_case_id, const std::size_t nx, const std::si
 }
 
 SWESolver::SWESolver(const std::string &h5_file, const double domain_size_x, const double domain_size_y, int threads_per_block) :
-  size_x_(domain_size_x), size_y_(domain_size_y), // Initialize size_x_, size_y_ first
-  nx_(0), ny_(0), // Initialize nx_, ny_ to 0, they will be set by init_from_HDF5_file_data_load
-  dx_(0.0), dy_(0.0), // Initialize dx_, dy_ to 0.0
+  size_x_(domain_size_x), size_y_(domain_size_y), 
+  nx_(0), ny_(0), 
+  dx_(0.0), dy_(0.0), 
   reflective_(false),
   threads_per_block_(threads_per_block) // Initialize threads_per_block_
 {
   assert(threads_per_block_ > 0 && "threads_per_block must be positive.");
 
-  // Step 1: Load data from HDF5, this will set member variables nx_ and ny_
+  
   this->init_from_HDF5_file_data_load(h5_file);
 
-  // Step 2: Now that nx_ and ny_ are known, calculate dx_ and dy_
+  
   if (nx_ == 0 || ny_ == 0) {
     std::cerr << "Error: nx or ny is zero after reading from HDF5 file '" << h5_file << "'." << std::endl;
     assert(false && "nx or ny is zero after HDF5 read.");
@@ -156,10 +155,10 @@ SWESolver::SWESolver(const std::string &h5_file, const double domain_size_x, con
   dx_ = size_x_ / nx_;
   dy_ = size_y_ / ny_;
 
-  // Step 3: Assert minimum grid size
+  
   assert(nx_ >= 3 && ny_ >= 3 && "Grid dimensions must be at least 3x3 for inner cell computations and boundary conditions.");
 
-  // Step 4: Allocate GPU matrices AFTER nx_ and ny_ are known
+  
   h0_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
   h1_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
   hu0_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
@@ -170,18 +169,18 @@ SWESolver::SWESolver(const std::string &h5_file, const double domain_size_x, con
   zdx_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
   zdy_gpu_ = std::make_unique<SWEMatrixGPU>(nx_, ny_);
 
-  // Step 5: Copy host data (which was loaded by init_from_HDF5_file_data_load) to GPU
+  
   h0_gpu_->copy_from_host(this->h0_host_);
   hu0_gpu_->copy_from_host(this->hu0_host_);
   hv0_gpu_->copy_from_host(this->hv0_host_);
   z_gpu_->copy_from_host(this->z_host_);
 
-  // Step 6: Initialize other GPU matrices
+  
   h1_gpu_->fill(0.0);
   hu1_gpu_->fill(0.0);
   hv1_gpu_->fill(0.0);
 
-  // Step 7: Initialize derivatives
+  
   this->init_dx_dy();
 }
 
@@ -425,20 +424,16 @@ SWESolver::solve(const double Tend, const bool full_log, const std::size_t outpu
   }
 
   // After the loop, h_current, hu_current, hv_current hold the final solution.
-  // If h1_gpu_ is intended to always hold the final solution, copy to it if h_current is h0_gpu_.
-  // This ensures h1_gpu_ always contains the last computed state.
-  if (h_current == h0_gpu_.get()) { // This means h0_gpu_ now holds the final solution due to an odd number of swaps
+  if (h_current == h0_gpu_.get()) {
       cudaMemcpy(h1_gpu_->data(), h0_gpu_->data(), nx_ * ny_ * sizeof(double), cudaMemcpyDeviceToDevice);
       cudaMemcpy(hu1_gpu_->data(), hu0_gpu_->data(), nx_ * ny_ * sizeof(double), cudaMemcpyDeviceToDevice);
       cudaMemcpy(hv1_gpu_->data(), hv0_gpu_->data(), nx_ * ny_ * sizeof(double), cudaMemcpyDeviceToDevice);
   }
-  // If h_current is already h1_gpu_, then h1_gpu_ already holds the final solution.
+
 
 
   if (output_n > 0)
   {
-    // Copy final h from GPU to host for writing
-    // Ensure we copy from the correct final buffer, which is now consistently in h1_gpu_
     h1_gpu_->copy_to_host(h_output_host);
     writer->add_h(h_output_host, T);
   }

@@ -7,7 +7,6 @@
 #include <vector>  // For host-side data for reduction result
 
 // Define g as a preprocessor macro to be a compile-time constant for kernels
-// This value is taken directly from SWESolver::g in swe.hh
 #define G_CONSTANT 127267.20000000
 
 // Device functions (can be called from other kernels or host functions with __device__)

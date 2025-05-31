@@ -15,9 +15,8 @@ main(int argc, char **argv)
   std::size_t nx = 100;
   std::size_t ny = 100;
   int threadsPerBlock = 256; // Default CUDA threads per block
-  // std::string output_fname = "output"; // Default output filename prefix
   bool full_log = false; // Disable full logging for performance runs
-  std::size_t output_n = 10; // Disable output file generation for performance runs
+  std::size_t output_n = 0; // Disable/enable output file generation for performance runs
 
   // Parse command line arguments
   if (argc > 1) {
@@ -42,7 +41,7 @@ main(int argc, char **argv)
   // Adjust Tend based on test_case_id if not explicitly provided or if defaults are used
   if (argc <= 3) { // If Tend was not provided as an argument
       if (test_case_id == 1) {
-          Tend = 0.01;
+          Tend = 0.1;
       } else if (test_case_id == 2) {
           Tend = 1.0;
       } else if (test_case_id == 3) { // For file-based case, use a default Tend
